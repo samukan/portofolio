@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>A-Frame Arcade Racer</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-physics-system@v4.2.2/dist/aframe-physics-system.min.js"></script>
+
+    <style>
+      /* HUD - Neon-tyylinen pistenäyttö */
+      #hud {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        z-index: 9999;
+        font-family: 'Courier New', monospace;
+        color: #00ffff;
+        text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff, 0 0 30px #00ffff;
+        pointer-events: none;
+      }
+      #score-display {
+        font-size: 32px;
+        font-weight: bold;
+      }
+      #speed-display {
+        font-size: 18px;
+        margin-top: 10px;
+        color: #ffff00;
+        text-shadow: 0 0 10px #ffff00, 0 0 20px #ffff00;
+      }
+      #game-message {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: 'Courier New', monospace;
+        font-size: 48px;
+        font-weight: bold;
+        color: #00ff00;
+        text-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00;
+        z-index: 9999;
+        display: none;
+        text-align: center;
+      }
+      #restart-btn {
+        margin-top: 20px;
+        padding: 15px 40px;
+        font-family: 'Courier New', monospace;
+        font-size: 24px;
+        font-weight: bold;
+        color: #00ffff;
+        background: transparent;
+        border: 3px solid #00ffff;
+        cursor: pointer;
+        text-shadow: 0 0 10px #00ffff;
+        box-shadow: 0 0 20px #00ffff, inset 0 0 20px rgba(0, 255, 255, 0.1);
+        transition: all 0.3s;
+      }
+      #restart-btn:hover {
+        background: rgba(0, 255, 255, 0.2);
+        box-shadow: 0 0 30px #00ffff, inset 0 0 30px rgba(0, 255, 255, 0.2);
+      }
+    </style>
+
+    <script>
+      // GLOBAALI PELITILA
+      window.gameScore = 0;
+      window.gameFinished = false;
+
+      // VÄRITEEMAT
+      const colorThemes = [
+        {
+          name: 'Cyan',
+          bg: '#0a0a15',
+          track: '#1a1a2e',
+          edge: '#00FFFF',
+          obstacle: '#FF1493',
+          grid: '#00FFFF',
+        },
+        {
+          name: 'Red',
+          bg: '#150a0a',
+          track: '#2e1a1a',
+          edge: '#FF3333',
+          obstacle: '#FFAA00',
+          grid: '#FF3333',
+        },
+        {
+          name: 'Green',
+          bg: '#0a150a',
+          track: '#1a2e1a',
+          edge: '#33FF33',
+          obstacle: '#FF33FF',
+          grid: '#33FF33',
+        },
+        {
+          name: 'Purple',
+          bg: '#100a15',
+          track: '#251a2e',
+          edge: '#AA33FF',
+          obstacle: '#33FFAA',
+          grid: '#AA33FF',
+        },
+        {
+          name: 'Pink',
+          bg: '#150a10',
+          track: '#2e1a25',
+          edge: '#FF66AA',
+          obstacle: '#66FFAA',
+          grid: '#FF66AA',
+        },
+      ];
+      window.currentTheme =
+        colorThemes[Math.floor(Math.random() * colorThemes.length)];
+      console.log('Theme 1:', window.currentTheme.name);
+
+      // Toinen teema puolivälin jälkeen
+      let secondThemeIndex;
+      do {
+        secondThemeIndex = Math.floor(Math.random() * colorThemes.length);
+      } while (colorThemes[secondThemeIndex].name === window.currentTheme.name);
+      window.secondTheme = colorThemes[secondThemeIndex];
+      console.log('Theme 2:', window.secondTheme.name);
+
+      // Funktio joka palauttaa teeman z-koordinaatin mukaan
+      window.getThemeForZ = function (z) {
+        return z > -500 ? window.currentTheme : window.secondTheme;
+      };
+
+      // radan parametrit
+      const trackParams = {
+        x1_freq: 0.004 + Math.random() * 0.006, // Loivenna kaaria
+        x1_amp: 20 + Math.random() * 35, //amplitudi (20-35)
+        x2_freq: 0.01 + Math.random() * 0.008, // Pienempiä mutkia
+        x2_amp: 5 + Math.random() * 8, // mutkat (5-13)
+        y1_freq: 0.008 + Math.random() * 0.006, // tiheys
+        y1_amp: 3 + Math.random() * 4, // mäet (3-7)
+      };
+
+      // RADAN MUOTO - Siniaalto-funktiot
+      window.getTrackPosition = function (z) {
+        return {
+          x:
+            Math.sin(z * trackParams.x1_freq) * trackParams.x1_amp +
+            Math.sin(z * trackParams.x2_freq) * trackParams.x2_amp,
+          y: Math.sin(z * trackParams.y1_freq) * trackParams.y1_amp + 2,
+          z: z,
+        };
+      };
+
+      // Laske radan tangenttikulma
+      window.getTrackAngle = function (z) {
+        const delta = 0.5;
+        const p1 = getTrackPosition(z - delta);
+        const p2 = getTrackPosition(z + delta);
+        return Math.atan2(p2.x - p1.x, p2.z - p1.z);
+      };
+
+      // Päivitä HUD
+      function updateHUD() {
+        const scoreEl = document.getElementById('score-display');
+        if (scoreEl) {
+          scoreEl.innerText = '⭐ STARS: ' + window.gameScore;
+        }
+      }
+
+      // Näytä loppuviesti
+      function showFinishMessage() {
+        const msgEl = document.getElementById('game-message');
+        if (msgEl) {
+          msgEl.innerHTML =
+            '🏁 FINISH!<br>Stars: ' +
+            window.gameScore +
+            '<br><button id="restart-btn" onclick="restartGame()">RESTART</button>';
+          msgEl.style.display = 'block';
+          msgEl.style.color = '#00ff00';
+        }
+      }
+
+      // Näytä putoamisviesti
+      function showFallMessage() {
+        const msgEl = document.getElementById('game-message');
+        if (msgEl) {
+          msgEl.innerHTML =
+            '💥 FELL OFF!<br><button id="restart-btn" onclick="restartGame()">TRY AGAIN</button>';
+          msgEl.style.display = 'block';
+          msgEl.style.color = '#ff3333';
+          msgEl.style.textShadow = '0 0 20px #ff3333, 0 0 40px #ff3333';
+        }
+      }
+
+      // Pelin uudelleenkäynnistys
+      function restartGame() {
+        window.location.reload();
+      }
+    </script>
+
+    <script>
+      AFRAME.registerComponent('arcade-car', {
+        schema: {
+          maxSpeed: { type: 'number', default: 50 },
+          acceleration: { type: 'number', default: 15 },
+          deceleration: { type: 'number', default: 20 },
+          turnSpeed: { type: 'number', default: 2.5 },
+        },
+        init: function () {
+          this.inputs = { up: false, down: false, left: false, right: false };
+          this.currentSpeed = 0;
+          this.currentTurnSpeed = 0;
+          this.smoothY = 0;
+          this.lastY = 0;
+
+          // Jousitus
+          this.suspensionOffset = 0;
+          this.suspensionVelocity = 0;
+          this.lastBodyY = 0;
+
+          window.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyW') this.inputs.up = true;
+            if (e.code === 'KeyS') this.inputs.down = true;
+            if (e.code === 'KeyA') this.inputs.left = true;
+            if (e.code === 'KeyD') this.inputs.right = true;
+          });
+
+          window.addEventListener('keyup', (e) => {
+            if (e.code === 'KeyW') this.inputs.up = false;
+            if (e.code === 'KeyS') this.inputs.down = false;
+            if (e.code === 'KeyA') this.inputs.left = false;
+            if (e.code === 'KeyD') this.inputs.right = false;
+          });
+
+          // visuaaliset osat
+          this.wheels = document.querySelectorAll('.wheel-visual');
+          this.frontWheels = document.querySelectorAll(
+            '.front-wheel-container'
+          );
+          this.rearWheelContainers = document.querySelectorAll(
+            '.rear-wheel-container'
+          );
+          this.allWheelContainers =
+            document.querySelectorAll('.wheel-container');
+          this.chassisMesh = this.el.querySelector('.chassis-visual');
+
+          // Törmäystunnistus - nollaa nopeus törmäyksessä
+          this.el.addEventListener('collide', (e) => {
+            if (
+              e.detail.body.el &&
+              e.detail.body.el.classList.contains('obstacle')
+            ) {
+              this.currentSpeed = 0;
+              console.log('Crashed into obstacle!');
+            }
+          });
+
+          // Putoamisen tunnistus
+          this.hasFallen = false;
+        },
+
+        tick: function (time, timeDelta) {
+          const body = this.el.body;
+          if (!body) return;
+
+          // Tarkista putoaminen (Y < -20)
+          if (!this.hasFallen && body.position.y < -20) {
+            this.hasFallen = true;
+            this.currentSpeed = 0;
+            showFallMessage();
+            return;
+          }
+
+          // Älä päivitä jos pudonnut
+          if (this.hasFallen) return;
+
+          const dt = timeDelta / 1000;
+
+          let targetTurn = 0;
+          if (this.inputs.left) targetTurn = 1;
+          if (this.inputs.right) targetTurn = -1;
+
+          const turnLerpSpeed = 3.0;
+          this.currentTurnSpeed +=
+            (targetTurn - this.currentTurnSpeed) * turnLerpSpeed * dt;
+
+          const speedFactor =
+            1 - (Math.abs(this.currentSpeed) / this.data.maxSpeed) * 0.3;
+          body.angularVelocity.y =
+            this.currentTurnSpeed * this.data.turnSpeed * speedFactor;
+
+          // TÄRKEÄÄ: Estä kaatuminen nollaamalla X/Z kallistukset
+          body.angularVelocity.x = 0;
+          body.angularVelocity.z = 0;
+
+          const currentRot = this.el.object3D.rotation;
+          if (Math.abs(currentRot.x) > 0.1 || Math.abs(currentRot.z) > 0.1) {
+            body.quaternion.setFromEuler(0, currentRot.y, 0);
+            body.angularVelocity.set(0, body.angularVelocity.y, 0);
+          }
+
+          // LIIKE
+          let targetSpeed = 0;
+          if (this.inputs.up) targetSpeed = this.data.maxSpeed;
+          if (this.inputs.down) targetSpeed = -this.data.maxSpeed * 0.4;
+
+          if (this.inputs.up || this.inputs.down) {
+            // Kiihdytys
+            if (this.currentSpeed < targetSpeed) {
+              this.currentSpeed += this.data.acceleration * dt;
+              if (this.currentSpeed > targetSpeed)
+                this.currentSpeed = targetSpeed;
+            } else if (this.currentSpeed > targetSpeed) {
+              this.currentSpeed -= this.data.acceleration * dt;
+              if (this.currentSpeed < targetSpeed)
+                this.currentSpeed = targetSpeed;
+            }
+          } else {
+            // Jarrutus
+            if (this.currentSpeed > 0) {
+              this.currentSpeed -= this.data.deceleration * dt;
+              if (this.currentSpeed < 0) this.currentSpeed = 0;
+            } else if (this.currentSpeed < 0) {
+              this.currentSpeed += this.data.deceleration * dt;
+              if (this.currentSpeed > 0) this.currentSpeed = 0;
+            }
+          }
+
+          // Laske auton eteenpäin-suunta
+          const direction = new THREE.Vector3(0, 0, -1);
+          direction.applyQuaternion(this.el.object3D.quaternion);
+          direction.normalize();
+
+          // Aseta nopeus
+          body.velocity.x = direction.x * this.currentSpeed;
+          body.velocity.z = direction.z * this.currentSpeed;
+
+          // Päivitä HUD nopeusnäyttö
+          const speedDisplay = document.getElementById('speed-display');
+          if (speedDisplay) {
+            const speedKmh = Math.abs(Math.round(this.currentSpeed * 3.6));
+            speedDisplay.innerText = speedKmh + ' km/h';
+          }
+
+          // Pyöritä renkaita vauhdin mukaan
+          const wheelRotationSpeed = this.currentSpeed * dt * 2;
+          this.wheels.forEach((w) => {
+            w.object3D.rotation.x += wheelRotationSpeed;
+          });
+
+          // Käännä eturenkaita ohjauksen mukaan
+          const targetSteer = this.currentTurnSpeed * 0.5;
+          this.frontWheels.forEach((w) => {
+            w.object3D.rotation.y = targetSteer;
+          });
+
+          // Kallista runkoa käännöksessä
+          if (this.chassisMesh) {
+            this.chassisMesh.object3D.rotation.z = this.currentTurnSpeed * -0.1;
+          }
+
+          // JOUSITUS
+          const bodyY = body.position.y;
+          const yChange = bodyY - this.lastBodyY;
+          this.lastBodyY = bodyY;
+
+          // Jousi: voima = -k * offset - damping *
+          const springStrength = 15;
+          const damping = 4;
+
+          this.suspensionVelocity += yChange * 20;
+
+          const springForce = -springStrength * this.suspensionOffset;
+          const dampingForce = -damping * this.suspensionVelocity;
+
+          this.suspensionVelocity += (springForce + dampingForce) * dt;
+          this.suspensionOffset += this.suspensionVelocity * dt;
+
+          this.suspensionOffset = Math.max(
+            -0.15,
+            Math.min(0.15, this.suspensionOffset)
+          );
+
+          if (this.chassisMesh) {
+            this.chassisMesh.object3D.position.y = -0.2 - this.suspensionOffset;
+          }
+
+          // KAMERAN Y-TASOITUS
+          const camera = this.el.querySelector('[camera]');
+          if (camera) {
+            const currentY = this.el.object3D.position.y;
+            const yDiff = Math.abs(currentY - this.lastY);
+
+            const lerpSpeed = yDiff < 0.5 ? 0.02 : 0.15;
+            this.smoothY += (currentY - this.smoothY) * lerpSpeed;
+
+            const yOffset = this.smoothY - currentY;
+            camera.object3D.position.y = 3 + yOffset;
+
+            this.lastY = currentY;
+          }
+        },
+      });
+
+      // LEVEL GENERATOR
+      AFRAME.registerComponent('level-generator', {
+        init: function () {
+          const scene = this.el.sceneEl;
+          const usedPositions = [];
+
+          // 1. GENEROI RATASEGMENTIT
+          for (let z = 10; z >= -1050; z -= 2) {
+            const pos = getTrackPosition(z);
+            const nextPos = getTrackPosition(z - 2);
+            const theme = getThemeForZ(z);
+
+            const angle = Math.atan2(nextPos.x - pos.x, nextPos.z - pos.z);
+            const pitch = Math.atan2(nextPos.y - pos.y, 2);
+
+            // Ratasegmentti
+            const segment = document.createElement('a-box');
+            segment.setAttribute(
+              'position',
+              `${pos.x} ${pos.y - 0.5} ${pos.z}`
+            );
+            segment.setAttribute('width', '16');
+            segment.setAttribute('height', '1.5');
+            segment.setAttribute('depth', '4');
+            segment.setAttribute(
+              'rotation',
+              `${-pitch * (180 / Math.PI)} ${-angle * (180 / Math.PI)} 0`
+            );
+            segment.setAttribute(
+              'material',
+              `color: ${theme.track}; metalness: 0.3; roughness: 0.4`
+            );
+            segment.setAttribute('static-body', '');
+            segment.classList.add('road-segment');
+            scene.appendChild(segment);
+
+            // Reunaviivat
+            if (z % 4 === 0) {
+              const leftEdge = document.createElement('a-box');
+              leftEdge.setAttribute(
+                'position',
+                `${pos.x - 7.5} ${pos.y + 0.5} ${pos.z}`
+              );
+              leftEdge.setAttribute('width', '0.5');
+              leftEdge.setAttribute('height', '0.8');
+              leftEdge.setAttribute('depth', '6');
+              leftEdge.setAttribute(
+                'rotation',
+                `${-pitch * (180 / Math.PI)} ${-angle * (180 / Math.PI)} 0`
+              );
+              leftEdge.setAttribute(
+                'material',
+                `color: ${theme.edge}; emissive: ${theme.edge}; emissiveIntensity: 0.8`
+              );
+              scene.appendChild(leftEdge);
+
+              // Oikea reuna
+              const rightEdge = document.createElement('a-box');
+              rightEdge.setAttribute(
+                'position',
+                `${pos.x + 7.5} ${pos.y + 0.5} ${pos.z}`
+              );
+              rightEdge.setAttribute('width', '0.5');
+              rightEdge.setAttribute('height', '0.8');
+              rightEdge.setAttribute('depth', '6');
+              rightEdge.setAttribute(
+                'rotation',
+                `${-pitch * (180 / Math.PI)} ${-angle * (180 / Math.PI)} 0`
+              );
+              rightEdge.setAttribute(
+                'material',
+                `color: ${theme.edge}; emissive: ${theme.edge}; emissiveIntensity: 0.8`
+              );
+              scene.appendChild(rightEdge);
+            }
+          }
+
+          // 2. GENEROI TÄHDET JA ESTEET (Z = -20 -> -1000)
+          for (let z = -20; z >= -1000; z -= 15) {
+            const trackPos = getTrackPosition(z);
+            const theme = getThemeForZ(z);
+
+            let offsetX;
+            let attempts = 0;
+            do {
+              offsetX = Math.random() * 8 - 4;
+              attempts++;
+            } while (
+              usedPositions.some(
+                (pos) =>
+                  Math.abs(pos.x - (trackPos.x + offsetX)) < 2 &&
+                  Math.abs(pos.z - z) < 10
+              ) &&
+              attempts < 10
+            );
+
+            const finalX = trackPos.x + offsetX;
+            const finalY = trackPos.y + 1.5;
+            usedPositions.push({ x: finalX, z: z });
+
+            if (Math.random() < 0.5) {
+              const star = document.createElement('a-octahedron');
+              star.setAttribute('position', `${finalX} ${finalY} ${z}`);
+              star.setAttribute('radius', '0.8');
+              star.setAttribute(
+                'material',
+                'color: #FFD700; emissive: #FFD700; emissiveIntensity: 0.5'
+              );
+              star.setAttribute('star-item', '');
+              star.classList.add('star');
+              scene.appendChild(star);
+            } else {
+              // ESTEET
+              const obstacleType = Math.random();
+
+              if (obstacleType < 0.4) {
+                // SYLINTERI
+                const obstacle = document.createElement('a-cylinder');
+                obstacle.setAttribute(
+                  'position',
+                  `${finalX} ${trackPos.y + 2} ${z}`
+                );
+                obstacle.setAttribute('radius', '1');
+                obstacle.setAttribute('height', '4');
+                obstacle.setAttribute(
+                  'material',
+                  `color: ${theme.obstacle}; emissive: ${theme.obstacle}; emissiveIntensity: 0.6`
+                );
+                obstacle.setAttribute('static-body', '');
+                obstacle.classList.add('obstacle');
+                scene.appendChild(obstacle);
+              } else if (obstacleType < 0.7) {
+                // KUUTIO
+                const obstacle = document.createElement('a-box');
+                obstacle.setAttribute(
+                  'position',
+                  `${finalX} ${trackPos.y + 1} ${z}`
+                );
+                obstacle.setAttribute('width', '2');
+                obstacle.setAttribute('height', '2');
+                obstacle.setAttribute('depth', '2');
+                obstacle.setAttribute(
+                  'material',
+                  `color: ${theme.obstacle}; emissive: ${theme.obstacle}; emissiveIntensity: 0.6`
+                );
+                obstacle.setAttribute('static-body', '');
+                obstacle.classList.add('obstacle');
+                scene.appendChild(obstacle);
+              } else {
+              }
+            }
+          }
+
+          // 3. PUOLIVÄLIN PORTTI (Z = -500)
+          const midPos = getTrackPosition(-500);
+
+          // Puolivälin portti - vasen pylväs
+          const midPillarLeft = document.createElement('a-box');
+          midPillarLeft.setAttribute(
+            'position',
+            `${midPos.x - 7} ${midPos.y + 3} -500`
+          );
+          midPillarLeft.setAttribute('width', '1');
+          midPillarLeft.setAttribute('height', '6');
+          midPillarLeft.setAttribute('depth', '1');
+          midPillarLeft.setAttribute(
+            'material',
+            `color: ${window.secondTheme.edge}; emissive: ${window.secondTheme.edge}; emissiveIntensity: 1`
+          );
+          scene.appendChild(midPillarLeft);
+
+          // Puolivälin portti - oikea pylväs
+          const midPillarRight = document.createElement('a-box');
+          midPillarRight.setAttribute(
+            'position',
+            `${midPos.x + 7} ${midPos.y + 3} -500`
+          );
+          midPillarRight.setAttribute('width', '1');
+          midPillarRight.setAttribute('height', '6');
+          midPillarRight.setAttribute('depth', '1');
+          midPillarRight.setAttribute(
+            'material',
+            `color: ${window.secondTheme.edge}; emissive: ${window.secondTheme.edge}; emissiveIntensity: 1`
+          );
+          scene.appendChild(midPillarRight);
+
+          // Puolivälin portti - yläpalkki
+          const midArch = document.createElement('a-box');
+          midArch.setAttribute('position', `${midPos.x} ${midPos.y + 6} -500`);
+          midArch.setAttribute('width', '16');
+          midArch.setAttribute('height', '1');
+          midArch.setAttribute('depth', '1');
+          midArch.setAttribute(
+            'material',
+            `color: ${window.secondTheme.edge}; emissive: ${window.secondTheme.edge}; emissiveIntensity: 1`
+          );
+          scene.appendChild(midArch);
+
+          // 4. MAALIVIIVA Z = -1010
+          const finishPos = getTrackPosition(-1010);
+
+          const finishLine = document.createElement('a-box');
+          finishLine.setAttribute(
+            'position',
+            `${finishPos.x} ${finishPos.y} -1010`
+          );
+          finishLine.setAttribute('width', '16');
+          finishLine.setAttribute('height', '1');
+          finishLine.setAttribute('depth', '2');
+          finishLine.setAttribute(
+            'material',
+            'color: white; emissive: white; emissiveIntensity: 0.8'
+          );
+          finishLine.setAttribute('finish-line', '');
+          finishLine.setAttribute('static-body', '');
+          scene.appendChild(finishLine);
+
+          // Maaliportti
+          const finishArch = document.createElement('a-box');
+          finishArch.setAttribute(
+            'position',
+            `${finishPos.x} ${finishPos.y + 5} -1010`
+          );
+          finishArch.setAttribute('width', '16');
+          finishArch.setAttribute('height', '1');
+          finishArch.setAttribute('depth', '0.5');
+          finishArch.setAttribute(
+            'material',
+            'color: #00FF00; emissive: #00FF00; emissiveIntensity: 1'
+          );
+          scene.appendChild(finishArch);
+
+          // 5. HYPPYRI MAALIN JÄLKEEN
+          const rampPos = getTrackPosition(-1030);
+
+          // Hyppyrin pohja
+          const ramp = document.createElement('a-box');
+          ramp.setAttribute('position', `${rampPos.x} ${rampPos.y + 2} -1035`);
+          ramp.setAttribute('width', '16');
+          ramp.setAttribute('height', '1');
+          ramp.setAttribute('depth', '20');
+          ramp.setAttribute('rotation', '30 0 0'); // Kallistettu ylöspäin
+          ramp.setAttribute(
+            'material',
+            'color: #FFD700; emissive: #FFD700; emissiveIntensity: 0.8'
+          );
+          ramp.setAttribute('static-body', '');
+          scene.appendChild(ramp);
+
+          // Hyppyrin reunat
+          const rampEdgeLeft = document.createElement('a-box');
+          rampEdgeLeft.setAttribute(
+            'position',
+            `${rampPos.x - 7.5} ${rampPos.y + 2} -1030`
+          );
+          rampEdgeLeft.setAttribute('width', '0.5');
+          rampEdgeLeft.setAttribute('height', '2');
+          rampEdgeLeft.setAttribute('depth', '15');
+          rampEdgeLeft.setAttribute('rotation', '25 0 0');
+          rampEdgeLeft.setAttribute(
+            'material',
+            `color: ${window.currentTheme.edge}; emissive: ${window.currentTheme.edge}; emissiveIntensity: 1`
+          );
+          scene.appendChild(rampEdgeLeft);
+
+          const rampEdgeRight = document.createElement('a-box');
+          rampEdgeRight.setAttribute(
+            'position',
+            `${rampPos.x + 7.5} ${rampPos.y + 2} -1030`
+          );
+          rampEdgeRight.setAttribute('width', '0.5');
+          rampEdgeRight.setAttribute('height', '2');
+          rampEdgeRight.setAttribute('depth', '15');
+          rampEdgeRight.setAttribute('rotation', '25 0 0');
+          rampEdgeRight.setAttribute(
+            'material',
+            `color: ${window.currentTheme.edge}; emissive: ${window.currentTheme.edge}; emissiveIntensity: 1`
+          );
+          scene.appendChild(rampEdgeRight);
+
+          console.log('Curved track generated!');
+        },
+      });
+
+      // STAR-ITEM - Kerättävä tähti
+      AFRAME.registerComponent('star-item', {
+        init: function () {
+          this.collected = false;
+          this.baseY = 0;
+          this.car = null;
+        },
+        tick: function (time) {
+          if (this.collected) return;
+
+          // Hae auto kerran
+          if (!this.car) {
+            this.car = document.getElementById('car-physics');
+          }
+          if (!this.car) return;
+
+          // Tallenna alkuperäinen Y ensimmäisellä kerralla
+          if (this.baseY === 0) {
+            this.baseY = this.el.object3D.position.y;
+          }
+
+          // Pyöritä tähteä
+          this.el.object3D.rotation.y = time * 0.002;
+          this.el.object3D.position.y =
+            this.baseY + Math.sin(time * 0.003) * 0.3;
+
+          // ETÄISYYSTARKISTUS auton ja tähden välillä
+          const starPos = this.el.object3D.position;
+          const carPos = this.car.object3D.position;
+
+          const dx = starPos.x - carPos.x;
+          const dy = starPos.y - carPos.y;
+          const dz = starPos.z - carPos.z;
+          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+          // Jos etäisyys < 3 yksikköä, kerää tähti
+          if (distance < 3) {
+            this.collected = true;
+            console.log('Star collected!');
+
+            // Päivitä pisteet
+            window.gameScore++;
+            updateHUD();
+
+            // Ääniefekti
+            try {
+              const audioCtx = new (window.AudioContext ||
+                window.webkitAudioContext)();
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              oscillator.frequency.value = 880;
+              oscillator.type = 'sine';
+              gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+              gainNode.gain.exponentialRampToValueAtTime(
+                0.01,
+                audioCtx.currentTime + 0.2
+              );
+              oscillator.start(audioCtx.currentTime);
+              oscillator.stop(audioCtx.currentTime + 0.2);
+            } catch (err) {}
+
+            // Piilota tähti
+            this.el.setAttribute('visible', 'false');
+          }
+        },
+      });
+
+      // FINISH-LINE - Maaliviiva
+      AFRAME.registerComponent('finish-line', {
+        init: function () {
+          this.el.addEventListener('collide', (e) => {
+            if (e.detail.body.el && e.detail.body.el.id === 'car-physics') {
+              if (!window.gameFinished) {
+                window.gameFinished = true;
+                console.log('FINISH! Stars collected:', window.gameScore);
+                showFinishMessage();
+
+                // Voittoääni
+                try {
+                  const audioCtx = new (window.AudioContext ||
+                    window.webkitAudioContext)();
+                  const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
+                  notes.forEach((freq, i) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.frequency.value = freq;
+                    osc.type = 'sine';
+                    gain.gain.setValueAtTime(
+                      0.2,
+                      audioCtx.currentTime + i * 0.15
+                    );
+                    gain.gain.exponentialRampToValueAtTime(
+                      0.01,
+                      audioCtx.currentTime + i * 0.15 + 0.3
+                    );
+                    osc.start(audioCtx.currentTime + i * 0.15);
+                    osc.stop(audioCtx.currentTime + i * 0.15 + 0.3);
+                  });
+                } catch (err) {}
+              }
+            }
+          });
+        },
+      });
+
+      // THEME-COLORS - Päivitä sceneen värit teeman mukaan
+      AFRAME.registerComponent('theme-colors', {
+        init: function () {
+          const theme = window.currentTheme;
+          const scene = this.el;
+
+          // Päivitä sumu
+          scene.setAttribute(
+            'fog',
+            `type: exponential; color: ${theme.bg}; density: 0.004`
+          );
+
+          // Päivitä renderer taustaväri
+          scene.setAttribute('background', `color: ${theme.bg}`);
+
+          // Päivitä taivas
+          const sky = scene.querySelector('a-sky');
+          if (sky) sky.setAttribute('color', theme.bg);
+
+          // Päivitä wireframe grid
+          const grid = scene.querySelector('#wireframe-grid a-plane');
+          if (grid) {
+            grid.setAttribute(
+              'material',
+              `color: ${theme.grid}; wireframe: true; opacity: 0.3; transparent: true`
+            );
+          }
+        },
+      });
+    </script>
+  </head>
+  <body>
+    <!-- HUD - Pistenäyttö -->
+    <div id="hud">
+      <div id="score-display">⭐ STARS: 0</div>
+      <div id="speed-display">WASD to drive</div>
+    </div>
+
+    <!-- Loppuviesti -->
+    <div id="game-message"></div>
+
+    <a-scene
+      physics="debug: false; gravity: -9.8"
+      vr-mode-ui="enabled: false"
+      level-generator
+      fog="type: exponential; color: #0a0a15; density: 0.008"
+      theme-colors
+      renderer="antialias: true; colorManagement: true"
+      background="color: #0a0a15"
+    >
+      <!-- Ympäristö -->
+      <a-sky color="#0a0a15"></a-sky>
+
+      <!-- Wireframe grid -->
+      <a-entity id="wireframe-grid" position="0 -100 -500">
+        <a-plane
+          width="3000"
+          height="3000"
+          rotation="-90 0 0"
+          material="color: #00FFFF; wireframe: true; opacity: 0.15; transparent: true"
+          segments-width="150"
+          segments-height="150"
+        ></a-plane>
+      </a-entity>
+
+      <!-- Valaistus -->
+      <a-light type="ambient" color="#333355" intensity="0.5"></a-light>
+      <a-light
+        type="directional"
+        position="1 5 1"
+        intensity="0.6"
+        cast-shadow="true"
+      ></a-light>
+
+      <!-- AUTO -->
+      <a-box
+        id="car-physics"
+        position="0 3 5"
+        width="2"
+        height="1"
+        depth="4"
+        material="opacity: 0; transparent: true"
+        dynamic-body="mass: 100; linearDamping: 0.0; angularDamping: 0.0"
+        arcade-car="maxSpeed: 50; acceleration: 20; deceleration: 25; turnSpeed: 3"
+      >
+        <!-- Kamera seuraa autoa -->
+        <a-entity
+          camera="far: 5000"
+          position="0 3 6"
+          rotation="-20 0 0"
+        ></a-entity>
+
+        <!-- Auton visuaalinen runko -->
+        <a-entity class="chassis-visual" position="0 -0.2 0">
+          <!-- Runko -->
+          <a-box
+            color="red"
+            width="1.8"
+            height="0.5"
+            depth="4"
+            position="0 0.5 0"
+          ></a-box>
+          <a-box
+            color="red"
+            width="1.6"
+            height="0.4"
+            depth="2"
+            position="0 1.0 0.5"
+          ></a-box>
+
+          <!-- Valot -->
+          <a-sphere
+            color="yellow"
+            radius="0.2"
+            position="0.6 0.5 -2"
+          ></a-sphere>
+          <a-sphere
+            color="yellow"
+            radius="0.2"
+            position="-0.6 0.5 -2"
+          ></a-sphere>
+          <a-light
+            type="spot"
+            angle="30"
+            penumbra="0.5"
+            intensity="2"
+            position="0 1 -2"
+            target="#focus"
+          ></a-light>
+          <a-entity id="focus" position="0 0 -10"></a-entity>
+
+          <!-- RENKAAT -->
+          <!-- Etu Vasen -->
+          <a-entity
+            class="front-wheel-container wheel-container"
+            position="1 0 -1.2"
+          >
+            <a-cylinder
+              class="wheel-visual"
+              radius="0.4"
+              height="0.3"
+              rotation="0 0 90"
+              color="black"
+            >
+              <a-box color="gray" width="0.6" height="0.1" depth="0.1"></a-box>
+              <!-- Vanne -->
+            </a-cylinder>
+          </a-entity>
+
+          <!-- Etu Oikea -->
+          <a-entity
+            class="front-wheel-container wheel-container"
+            position="-1 0 -1.2"
+          >
+            <a-cylinder
+              class="wheel-visual"
+              radius="0.4"
+              height="0.3"
+              rotation="0 0 90"
+              color="black"
+            >
+              <a-box color="gray" width="0.6" height="0.1" depth="0.1"></a-box>
+            </a-cylinder>
+          </a-entity>
+
+          <!-- Taka Vasen -->
+          <a-entity
+            class="rear-wheel-container wheel-container"
+            position="1 0 1.2"
+          >
+            <a-cylinder
+              class="wheel-visual"
+              radius="0.4"
+              height="0.3"
+              rotation="0 0 90"
+              color="black"
+            >
+              <a-box color="gray" width="0.6" height="0.1" depth="0.1"></a-box>
+            </a-cylinder>
+          </a-entity>
+
+          <!-- Taka Oikea -->
+          <a-entity
+            class="rear-wheel-container wheel-container"
+            position="-1 0 1.2"
+          >
+            <a-cylinder
+              class="wheel-visual"
+              radius="0.4"
+              height="0.3"
+              rotation="0 0 90"
+              color="black"
+            >
+              <a-box color="gray" width="0.6" height="0.1" depth="0.1"></a-box>
+            </a-cylinder>
+          </a-entity>
+        </a-entity>
+      </a-box>
+    </a-scene>
+  </body>
+</html>

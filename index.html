@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portfolio - Pelit & Mallit</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(
+          135deg,
+          #1a1a2e 0%,
+          #16213e 50%,
+          #0f3460 100%
+        );
+        min-height: 100vh;
+        color: #fff;
+      }
+
+      /* Header */
+      header {
+        text-align: center;
+        padding: 60px 20px 40px;
+        background: rgba(0, 0, 0, 0.3);
+        border-bottom: 2px solid #00ffff;
+        box-shadow: 0 4px 30px rgba(0, 255, 255, 0.2);
+      }
+
+      header h1 {
+        font-size: 3rem;
+        margin-bottom: 10px;
+        background: linear-gradient(90deg, #00ffff, #ff00ff, #00ffff);
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: gradient 3s ease infinite;
+      }
+
+      @keyframes gradient {
+        0%,
+        100% {
+          background-position: 0% center;
+        }
+        50% {
+          background-position: 100% center;
+        }
+      }
+
+      header p {
+        font-size: 1.2rem;
+        color: #aaa;
+      }
+
+      /* Navigation */
+      nav {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        padding: 20px;
+        flex-wrap: wrap;
+      }
+
+      nav button {
+        padding: 12px 30px;
+        font-size: 1rem;
+        border: 2px solid #00ffff;
+        background: transparent;
+        color: #00ffff;
+        border-radius: 30px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      nav button:hover,
+      nav button.active {
+        background: #00ffff;
+        color: #1a1a2e;
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+      }
+
+      /* Main Content */
+      main {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 40px 20px;
+      }
+
+      .section-title {
+        font-size: 2rem;
+        margin-bottom: 30px;
+        color: #00ffff;
+        text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+      }
+
+      /* Project Grid */
+      .projects-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 30px;
+      }
+
+      /* Project Card */
+      .project-card {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+
+      .project-card:hover {
+        transform: translateY(-10px);
+        border-color: #00ffff;
+        box-shadow: 0 20px 40px rgba(0, 255, 255, 0.2);
+      }
+
+      .project-thumbnail {
+        width: 100%;
+        height: 220px;
+        background: linear-gradient(45deg, #2a2a4a, #1a1a3a);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .project-thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .project-thumbnail .placeholder-icon {
+        font-size: 4rem;
+        color: #00ffff;
+        opacity: 0.5;
+      }
+
+      .play-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .project-card:hover .play-overlay {
+        opacity: 1;
+      }
+
+      .play-btn {
+        width: 80px;
+        height: 80px;
+        border: 3px solid #00ffff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 255, 255, 0.2);
+      }
+
+      .play-btn::after {
+        content: '';
+        width: 0;
+        height: 0;
+        border-left: 25px solid #00ffff;
+        border-top: 15px solid transparent;
+        border-bottom: 15px solid transparent;
+        margin-left: 5px;
+      }
+
+      .project-info {
+        padding: 25px;
+      }
+
+      .project-info h3 {
+        font-size: 1.4rem;
+        margin-bottom: 10px;
+        color: #fff;
+      }
+
+      .project-info p {
+        color: #aaa;
+        line-height: 1.6;
+        margin-bottom: 15px;
+      }
+
+      .project-tags {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .tag {
+        padding: 5px 15px;
+        background: rgba(0, 255, 255, 0.1);
+        border: 1px solid rgba(0, 255, 255, 0.3);
+        border-radius: 20px;
+        font-size: 0.85rem;
+        color: #00ffff;
+      }
+
+      /* Fullscreen Modal */
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.95);
+        z-index: 10000;
+        animation: fadeIn 0.3s ease;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      .modal.active {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 25px;
+        background: rgba(0, 0, 0, 0.8);
+        border-bottom: 1px solid #333;
+      }
+
+      .modal-header h2 {
+        color: #00ffff;
+        font-size: 1.3rem;
+      }
+
+      .close-btn {
+        width: 50px;
+        height: 50px;
+        border: 2px solid #ff4444;
+        background: transparent;
+        color: #ff4444;
+        font-size: 1.8rem;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .close-btn:hover {
+        background: #ff4444;
+        color: #fff;
+      }
+
+      .modal-content {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .modal-content iframe {
+        width: 100%;
+        height: 100%;
+        max-width: 1600px;
+        max-height: 900px;
+        border: none;
+        border-radius: 10px;
+      }
+
+      /* Coming Soon Card */
+      .coming-soon {
+        opacity: 0.6;
+        cursor: default;
+      }
+
+      .coming-soon:hover {
+        transform: none;
+        border-color: rgba(255, 255, 255, 0.1);
+        box-shadow: none;
+      }
+
+      .coming-soon .project-thumbnail::after {
+        content: 'TULOSSA PIAN';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-15deg);
+        background: rgba(255, 0, 255, 0.8);
+        padding: 10px 30px;
+        font-weight: bold;
+        border-radius: 5px;
+      }
+
+      /* Footer */
+      footer {
+        text-align: center;
+        padding: 40px 20px;
+        background: rgba(0, 0, 0, 0.3);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        margin-top: 60px;
+      }
+
+      footer p {
+        color: #666;
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        header h1 {
+          font-size: 2rem;
+        }
+
+        .projects-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .modal-header h2 {
+          font-size: 1rem;
+        }
+      }
+
+      /* Section visibility */
+      .section {
+        display: none;
+      }
+
+      .section.active {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <header>
+      <h1>🎮 Portfolio</h1>
+      <p>Pelit, 3D-mallit ja muut projektit</p>
+    </header>
+
+    <!-- Navigation -->
+    <nav>
+      <button class="active" data-filter="all">Kaikki</button>
+      <button data-filter="games">Pelit</button>
+      <button data-filter="models">3D-Mallit</button>
+      <button data-filter="other">Muut</button>
+    </nav>
+
+    <!-- Main Content -->
+    <main>
+      <div class="projects-grid" id="projects-container">
+        <!-- Retro Drive Game -->
+        <div
+          class="project-card"
+          data-category="games"
+          data-src="retro-drive.html"
+          data-title="Retro Drive"
+        >
+          <div class="project-thumbnail">
+            <span class="placeholder-icon">🏎️</span>
+            <div class="play-overlay">
+              <div class="play-btn"></div>
+            </div>
+          </div>
+          <div class="project-info">
+            <h3>Retro Drive</h3>
+            <p>
+              Retrohenkinen arcade-ajopeli rakennettu A-Frame WebGL:llä.
+              Väistele esteitä ja kerää pisteitä!
+            </p>
+            <div class="project-tags">
+              <span class="tag">WebGL</span>
+              <span class="tag">A-Frame</span>
+              <span class="tag">Peli</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Placeholder: 3D Model -->
+        <div class="project-card coming-soon" data-category="models">
+          <div class="project-thumbnail">
+            <span class="placeholder-icon">🎨</span>
+          </div>
+          <div class="project-info">
+            <h3>3D-Malli</h3>
+            <p>Uusi 3D-malli tulossa pian...</p>
+            <div class="project-tags">
+              <span class="tag">3D</span>
+              <span class="tag">Blender</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Placeholder: Another Game -->
+        <div class="project-card coming-soon" data-category="games">
+          <div class="project-thumbnail">
+            <span class="placeholder-icon">👾</span>
+          </div>
+          <div class="project-info">
+            <h3>Uusi Peli</h3>
+            <p>Seuraava peliprojekti työn alla...</p>
+            <div class="project-tags">
+              <span class="tag">Peli</span>
+              <span class="tag">Tulossa</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Placeholder: Other Project -->
+        <div class="project-card coming-soon" data-category="other">
+          <div class="project-thumbnail">
+            <span class="placeholder-icon">🚀</span>
+          </div>
+          <div class="project-info">
+            <h3>Muu Projekti</h3>
+            <p>Lisää projekteja tulossa...</p>
+            <div class="project-tags">
+              <span class="tag">Projekti</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Fullscreen Modal -->
+    <div class="modal" id="project-modal">
+      <div class="modal-header">
+        <h2 id="modal-title">Projekti</h2>
+        <button class="close-btn" id="close-modal">&times;</button>
+      </div>
+      <div class="modal-content">
+        <iframe id="modal-iframe" src="" allowfullscreen></iframe>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <p>&copy; 2025 - Portfolio</p>
+    </footer>
+
+    <script>
+      // DOM Elements
+      const projectsContainer = document.getElementById('projects-container');
+      const modal = document.getElementById('project-modal');
+      const modalTitle = document.getElementById('modal-title');
+      const modalIframe = document.getElementById('modal-iframe');
+      const closeModalBtn = document.getElementById('close-modal');
+      const filterButtons = document.querySelectorAll('nav button');
+
+      // Open project in modal
+      function openProject(card) {
+        const src = card.dataset.src;
+        const title = card.dataset.title;
+
+        if (!src) return; // Don't open coming soon cards
+
+        modalTitle.textContent = title;
+        modalIframe.src = src;
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+      }
+
+      // Close modal
+      function closeModal() {
+        modal.classList.remove('active');
+        modalIframe.src = '';
+        document.body.style.overflow = '';
+      }
+
+      // Event Listeners
+      projectsContainer.addEventListener('click', (e) => {
+        const card = e.target.closest('.project-card');
+        if (card && !card.classList.contains('coming-soon')) {
+          openProject(card);
+        }
+      });
+
+      closeModalBtn.addEventListener('click', closeModal);
+
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal();
+        }
+      });
+
+      // ESC key to close modal
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('active')) {
+          closeModal();
+        }
+      });
+
+      // Filter functionality
+      filterButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const filter = button.dataset.filter;
+
+          // Update active button
+          filterButtons.forEach((btn) => btn.classList.remove('active'));
+          button.classList.add('active');
+
+          // Filter cards
+          const cards = document.querySelectorAll('.project-card');
+          cards.forEach((card) => {
+            if (filter === 'all' || card.dataset.category === filter) {
+              card.style.display = 'block';
+            } else {
+              card.style.display = 'none';
+            }
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
